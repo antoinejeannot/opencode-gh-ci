@@ -147,6 +147,7 @@ const CICard = (props: {
   const [pulseFrame, setPulseFrame] = createSignal(0)
   const [cachePath, setCachePath] = createSignal<string | null>(null)
   const [expandedMap, setExpandedMap] = createSignal<Record<number, boolean>>({})
+  const [loaded, setLoaded] = createSignal(false)
 
   const toggleRun = (id: number) =>
     setExpandedMap((m) => ({ ...m, [id]: m[id] === undefined ? false : !m[id] }))
@@ -157,7 +158,7 @@ const CICard = (props: {
   const load = async () => {
     let p = cachePath()
     if (!p) { p = await discoverCachePath(registryPath); if (p) setCachePath(p) }
-    if (p) setCache(await readCache(p))
+    if (p) { setCache(await readCache(p)); setLoaded(true) }
   }
 
   onMount(() => {
@@ -207,9 +208,11 @@ const CICard = (props: {
   // Computed arrays — empty arrays produce zero DOM nodes
   const statusMessages = createMemo(() => {
     if (error()) return [{ text: ` ${error()}`, color: props.theme.error }]
-    if (!hasRuns()) return [{ text: " waiting...", color: props.theme.textMuted }]
     return [] as { text: string; color: any }[]
   })
+
+  // Hide entirely until loaded, and when no CI is configured (no runs, no error)
+  const visible = createMemo(() => loaded() && (hasRuns() || !!error()))
 
   // "workflows" detail: workflow names with status dots
   const workflowRows = createMemo(() => {
@@ -229,23 +232,21 @@ const CICard = (props: {
     return runs()
   })
 
+  if (!visible()) return <box />
+
   return (
     <box flexDirection="column" gap={0}>
       {/* Header */}
       <box flexDirection="row" width="100%" gap={0} onMouseDown={() => canToggle() && hasRuns() && setCollapsed((c) => !c)}>
         <text flexGrow={1} fg={props.theme.text}>
-          <Show when={hasRuns()} fallback={<b>CI</b>}>
-            <span>
-              {canToggle() ? (collapsed() ? "▶ " : "▼ ") : ""}<b>CI</b>
-              <span style={{ fg: props.theme.textMuted }}>{" "}{summary()}</span>
-            </span>
-          </Show>
+          <span>
+            {canToggle() ? (collapsed() ? "▶ " : "▼ ") : ""}<b>CI</b>
+            <span style={{ fg: props.theme.textMuted }}>{" "}{summary()}</span>
+          </span>
         </text>
-        <Show when={hasRuns()}>
-          <text fg={globalIcon().color}>{globalIcon().icon}</text>
-        </Show>
+        <text fg={globalIcon().color}>{globalIcon().icon}</text>
       </box>
-      {/* Status messages (error / waiting) */}
+      {/* Status messages (error) */}
       <Index each={statusMessages()}>
         {(msg) => <text fg={msg().color}>{msg().text}</text>}
       </Index>
