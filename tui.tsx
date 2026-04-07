@@ -205,14 +205,19 @@ const CICard = (props: {
     return { icon: "-", color: props.theme.textMuted }
   })
 
-  // Computed arrays — empty arrays produce zero DOM nodes
-  const statusMessages = createMemo(() => {
-    if (error()) return [{ text: ` ${error()}`, color: props.theme.error }]
-    return [] as { text: string; color: any }[]
+  // Subtitle shown next to "CI" in the header
+  const subtitle = createMemo(() => {
+    if (!loaded()) return "loading..."
+    if (error()) return error()!
+    if (!hasRuns()) return "no workflows"
+    return summary()
   })
 
-  // Hide entirely until loaded, and when no CI is configured (no runs, no error)
-  const visible = createMemo(() => loaded() && (hasRuns() || !!error()))
+  const subtitleColor = createMemo(() => {
+    if (!loaded() || !hasRuns()) return props.theme.textMuted
+    if (error()) return props.theme.error
+    return props.theme.textMuted
+  })
 
   // "workflows" detail: workflow names with status dots
   const workflowRows = createMemo(() => {
@@ -233,54 +238,50 @@ const CICard = (props: {
   })
 
   return (
-    <Show when={visible()}>
-      <box flexDirection="column" gap={0}>
-        {/* Header */}
-        <box flexDirection="row" width="100%" gap={0} onMouseDown={() => canToggle() && hasRuns() && setCollapsed((c) => !c)}>
-          <text flexGrow={1} fg={props.theme.text}>
-            <span>
-              {canToggle() ? (collapsed() ? "▶ " : "▼ ") : ""}<b>CI</b>
-              <span style={{ fg: props.theme.textMuted }}>{" "}{summary()}</span>
+    <box flexDirection="column" gap={0}>
+      {/* Header */}
+      <box flexDirection="row" width="100%" gap={0} onMouseDown={() => canToggle() && hasRuns() && setCollapsed((c) => !c)}>
+        <text flexGrow={1} fg={props.theme.text}>
+          <span>
+            {canToggle() && hasRuns() ? (collapsed() ? "▶ " : "▼ ") : ""}<b>CI</b>
+            <span style={{ fg: subtitleColor() }}>{" "}{subtitle()}</span>
+          </span>
+        </text>
+        <Show when={hasRuns()}>
+          <text fg={globalIcon().color}>{globalIcon().icon}</text>
+        </Show>
+      </box>
+      {/* Workflows detail */}
+      <Index each={workflowRows()}>
+        {(run) => (
+          <text>
+            <span style={{ fg: dotColor(props.theme, run().status, run().conclusion) }}>
+              {"  "}{DOT}
+            </span>
+            <span style={{ fg: props.theme.text }}>
+              {" "}{truncate(run().name, props.maxNameLength)}
             </span>
           </text>
-          <text fg={globalIcon().color}>{globalIcon().icon}</text>
-        </box>
-        {/* Status messages (error) */}
-        <Index each={statusMessages()}>
-          {(msg) => <text fg={msg().color}>{msg().text}</text>}
-        </Index>
-        {/* Workflows detail */}
-        <Index each={workflowRows()}>
-          {(run) => (
-            <text>
-              <span style={{ fg: dotColor(props.theme, run().status, run().conclusion) }}>
-                {"  "}{DOT}
-              </span>
-              <span style={{ fg: props.theme.text }}>
-                {" "}{truncate(run().name, props.maxNameLength)}
-              </span>
-            </text>
-          )}
-        </Index>
-        {/* Jobs detail: single workflow collapsed */}
-        <Index each={flatJobs()}>
-          {(job) => (
-            <JobRow job={job()} theme={props.theme} nowSec={nowSec()} pulseFrame={pulseFrame()}
-              indent={""} maxLen={props.maxNameLength} rightAlign={props.rightAlignElapsed} />
-          )}
-        </Index>
-        {/* Jobs detail: multiple workflows */}
-        <For each={displayRuns()}>
-          {(run) => (
-            <WorkflowRow
-              run={run} theme={props.theme} nowSec={nowSec()} pulseFrame={pulseFrame()}
-              expanded={isRunExpanded(run.id)} onToggle={() => toggleRun(run.id)}
-              maxLen={props.maxNameLength} rightAlign={props.rightAlignElapsed}
-            />
-          )}
-        </For>
-      </box>
-    </Show>
+        )}
+      </Index>
+      {/* Jobs detail: single workflow collapsed */}
+      <Index each={flatJobs()}>
+        {(job) => (
+          <JobRow job={job()} theme={props.theme} nowSec={nowSec()} pulseFrame={pulseFrame()}
+            indent={""} maxLen={props.maxNameLength} rightAlign={props.rightAlignElapsed} />
+        )}
+      </Index>
+      {/* Jobs detail: multiple workflows */}
+      <For each={displayRuns()}>
+        {(run) => (
+          <WorkflowRow
+            run={run} theme={props.theme} nowSec={nowSec()} pulseFrame={pulseFrame()}
+            expanded={isRunExpanded(run.id)} onToggle={() => toggleRun(run.id)}
+            maxLen={props.maxNameLength} rightAlign={props.rightAlignElapsed}
+          />
+        )}
+      </For>
+    </box>
   )
 }
 
