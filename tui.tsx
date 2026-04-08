@@ -238,7 +238,7 @@ const CICard = (props: {
                     <Show when={i() > 0}>
                       <span style={{ fg: props.theme.textMuted }}>{", "}</span>
                     </Show>
-                    <span style={{ fg: props.theme.text }}>{String(part.count)}</span>
+                    <span style={{ fg: props.theme.text }}>{String(part.count)}{" "}</span>
                     <span style={{ fg: props.theme[part.colorKey] }}>
                       {part.colorKey === "warning"
                         ? PULSE_FRAMES[pulseFrame() % PULSE_FRAMES.length]

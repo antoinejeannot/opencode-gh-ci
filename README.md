@@ -2,20 +2,7 @@
 
 GitHub Actions CI status in the [OpenCode](https://opencode.ai) sidebar with live elapsed timers.
 
-```
-┌───────────────────────────────────────┐
-│ ...                                   │
-│                                       │
-│ ▼ CI (3 passed, 1 pending)          * │
-│   ▼ Deploy to Cloud Run               │
-│     * Lint                     2m 29s │
-│     * Test Backend            11m  5s │
-│     * Deploy Django           10m 20s │
-│   ▶ CodeQL                            │
-│                                       │
-│ ...                                   │
-└───────────────────────────────────────┘
-```
+![opencode-gh-ci demo](https://raw.githubusercontent.com/antoinejeannot/opencode-gh-ci/assets/assets/demo.gif)
 
 ## Install
 
