@@ -17,18 +17,6 @@ import {
 } from "./shared"
 import type { WorkflowJob, WorkflowRun } from "./shared"
 
-// ---------------------------------------------------------------------------
-// Git helpers
-// ---------------------------------------------------------------------------
-
-async function detectBranch(cwd: string): Promise<string> {
-  const proc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd, stdout: "pipe", stderr: "pipe",
-  })
-  const out = await new Response(proc.stdout).text()
-  return (await proc.exited) === 0 ? out.trim() : ""
-}
-
 async function runCmd(args: string[], cwd: string): Promise<string> {
   const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" })
   const out = await new Response(proc.stdout).text()
@@ -36,9 +24,8 @@ async function runCmd(args: string[], cwd: string): Promise<string> {
   return out.trim()
 }
 
-// ---------------------------------------------------------------------------
-// GitHub CLI data fetching
-// ---------------------------------------------------------------------------
+const detectBranch = (cwd: string): Promise<string> =>
+  runCmd(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd).catch(() => "")
 
 async function fetchJobsForRun(runId: number, cwd: string): Promise<WorkflowJob[]> {
   const raw = await runCmd(
@@ -80,10 +67,6 @@ async function fetchRuns(
   )
 }
 
-// ---------------------------------------------------------------------------
-// Cache I/O
-// ---------------------------------------------------------------------------
-
 async function readCache(filePath: string) {
   try { return readCacheText(await readFile(filePath, "utf8")) }
   catch { return emptyCache() }
@@ -93,10 +76,6 @@ async function writeCache(filePath: string, cache: any): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, JSON.stringify(cache, null, 2) + "\n", "utf8")
 }
-
-// ---------------------------------------------------------------------------
-// Plugin
-// ---------------------------------------------------------------------------
 
 const server: Plugin = async (input, options) => {
   const opts = parseOptions(options)
@@ -144,9 +123,9 @@ const server: Plugin = async (input, options) => {
     await deregisterSession(registryPath, cachePath)
   }
 
-  process.on("exit", () => void cleanup())
-  process.on("SIGINT", () => void cleanup())
-  process.on("SIGTERM", () => void cleanup())
+  for (const sig of ["exit", "SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => void cleanup())
+  }
 
   const handlers: Record<string, unknown> = { dispose: cleanup }
   if (opts.refresh_on_events) {

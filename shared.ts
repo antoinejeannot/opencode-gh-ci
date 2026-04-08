@@ -7,10 +7,6 @@ export const PLUGIN_ID = "gh-ci"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-gh-ci")
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface WorkflowJob {
   name: string
   status: "queued" | "in_progress" | "completed" | "waiting"
@@ -68,10 +64,6 @@ export interface PluginOptions {
   jobs_detail: JobsDetailOptions
 }
 
-// ---------------------------------------------------------------------------
-// Options parsing
-// ---------------------------------------------------------------------------
-
 const ALL_EVENTS = [
   "chat.message",
   "tool.execute.before",
@@ -93,17 +85,9 @@ const DEFAULTS = {
 
 const DEFAULT_JOBS_DETAIL: JobsDetailOptions = { collapse_single_workflow: true }
 
-const EMPTY_OPTIONS: PluginOptions = {
-  ...DEFAULTS,
-  refresh_on_events: [...ALL_EVENTS],
-  hide: { workflows: [], jobs: [] },
-  detail: "jobs",
-  jobs_detail: { ...DEFAULT_JOBS_DETAIL },
-}
-
 const toRecord = (v: unknown): Record<string, unknown> | undefined =>
   v && typeof v === "object" && !Array.isArray(v)
-    ? Object.fromEntries(Object.entries(v))
+    ? (v as Record<string, unknown>)
     : undefined
 
 const toBool = (v: unknown, fb: boolean) => (typeof v === "boolean" ? v : fb)
@@ -118,43 +102,42 @@ const toRegexList = (v: unknown): RegExp[] => {
     .filter((r): r is RegExp => r !== null)
 }
 
-export function parseOptions(raw: unknown): PluginOptions {
-  const rec = toRecord(raw)
-  if (!rec) return EMPTY_OPTIONS
+function parseDetail(raw: unknown): { detail: DetailLevel; jobs_detail: JobsDetailOptions } {
+  const jobs_detail = { ...DEFAULT_JOBS_DETAIL }
 
-  // refresh_on_events: false | true | string[]
+  if (typeof raw === "string" && (raw === "overall" || raw === "workflows" || raw === "jobs")) {
+    return { detail: raw, jobs_detail }
+  }
+
+  const rec = toRecord(raw)
+  if (!rec) return { detail: "jobs", jobs_detail }
+
+  if ("jobs" in rec) {
+    const jRec = toRecord(rec.jobs)
+    return {
+      detail: "jobs",
+      jobs_detail: {
+        collapse_single_workflow: toBool(jRec?.collapse_single_workflow, DEFAULT_JOBS_DETAIL.collapse_single_workflow),
+      },
+    }
+  }
+  if ("workflows" in rec) return { detail: "workflows", jobs_detail }
+  if ("overall" in rec) return { detail: "overall", jobs_detail }
+  return { detail: "jobs", jobs_detail }
+}
+
+export function parseOptions(raw: unknown): PluginOptions {
+  const rec = toRecord(raw) ?? {}
+
   const roe = rec.refresh_on_events
-  const refreshOnEvents: string[] | false =
+  const refresh_on_events: string[] | false =
     roe === false ? false
     : roe === true ? [...ALL_EVENTS]
     : Array.isArray(roe) ? roe.filter((e): e is string => typeof e === "string")
     : [...ALL_EVENTS]
 
-  // hide: { workflows: [...], jobs: [...] }
   const hideRec = toRecord(rec.hide)
-
-  // detail: "overall" | "workflows" | "jobs" | { jobs: {...} } | { workflows: {} } | { overall: {} }
-  const VALID_LEVELS: DetailLevel[] = ["overall", "workflows", "jobs"]
-  let detail: DetailLevel = "jobs"
-  let jobsDetail: JobsDetailOptions = { ...DEFAULT_JOBS_DETAIL }
-
-  const d = rec.detail
-  if (typeof d === "string" && VALID_LEVELS.includes(d as DetailLevel)) {
-    detail = d as DetailLevel
-  } else if (d && typeof d === "object" && !Array.isArray(d)) {
-    const dRec = d as Record<string, unknown>
-    if ("jobs" in dRec) {
-      detail = "jobs"
-      const jRec = toRecord(dRec.jobs)
-      jobsDetail = {
-        collapse_single_workflow: toBool(jRec?.collapse_single_workflow, DEFAULT_JOBS_DETAIL.collapse_single_workflow),
-      }
-    } else if ("workflows" in dRec) {
-      detail = "workflows"
-    } else if ("overall" in dRec) {
-      detail = "overall"
-    }
-  }
+  const { detail, jobs_detail } = parseDetail(rec.detail)
 
   return {
     enabled: toBool(rec.enabled, DEFAULTS.enabled),
@@ -165,19 +148,15 @@ export function parseOptions(raw: unknown): PluginOptions {
     max_runs: toNum(rec.max_runs, DEFAULTS.max_runs, 1),
     max_name_length: toNum(rec.max_name_length, DEFAULTS.max_name_length, 10),
     right_align_elapsed: toBool(rec.right_align_elapsed, DEFAULTS.right_align_elapsed),
-    refresh_on_events: refreshOnEvents,
+    refresh_on_events,
     hide: {
       workflows: toRegexList(hideRec?.workflows),
       jobs: toRegexList(hideRec?.jobs),
     },
     detail,
-    jobs_detail: jobsDetail,
+    jobs_detail,
   }
 }
-
-// ---------------------------------------------------------------------------
-// Filtering
-// ---------------------------------------------------------------------------
 
 export function filterRuns(runs: WorkflowRun[] | undefined, hide: HideFilters): WorkflowRun[] {
   if (!runs?.length) return []
@@ -191,10 +170,6 @@ export function filterRuns(runs: WorkflowRun[] | undefined, hide: HideFilters): 
       return filtered.length === r.jobs.length ? r : { ...r, jobs: filtered }
     })
 }
-
-// ---------------------------------------------------------------------------
-// Cache paths
-// ---------------------------------------------------------------------------
 
 export const nowISO = () => new Date().toISOString()
 
@@ -214,10 +189,6 @@ export function buildRegistryPath(root: string): string {
   const digest = createHash("sha1").update(path.resolve(root)).digest("hex").slice(0, 12)
   return path.join(BASE_DIR, `${digest}.registry.json`)
 }
-
-// ---------------------------------------------------------------------------
-// Registry
-// ---------------------------------------------------------------------------
 
 export async function readRegistry(registryPath: string): Promise<RegistryEntry[]> {
   try {
@@ -267,10 +238,6 @@ export async function cleanupSession(cachePath: string): Promise<void> {
   try { await rm(path.dirname(cachePath), { recursive: true, force: true }) } catch {}
 }
 
-// ---------------------------------------------------------------------------
-// Cache read/parse
-// ---------------------------------------------------------------------------
-
 export function readCacheText(text: string): CICache {
   try {
     const parsed = JSON.parse(text)
@@ -287,17 +254,13 @@ export function readCacheText(text: string): CICache {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Display helpers
-// ---------------------------------------------------------------------------
-
 export const DOT = "\u2022"
-export const PULSE_FRAMES = ["\u2022", "\u25E6"]
+export const PULSE_FRAMES = ["\u25D0", "\u25D3", "\u25D1", "\u25D2"]
 
 function formatElapsed(seconds: number): string {
-  if (seconds < 0) seconds = 0
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
+  const sec = Math.max(0, seconds)
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
